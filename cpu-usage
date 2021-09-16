@@ -1,0 +1,105 @@
+#! /bin/bash
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2021 Christophe BLAESS <christophe.blaess@logilin.fr>
+#
+
+Refresh_delay=2
+
+Version=0.2
+
+display_usage()
+{
+	echo "Usage: $0 [option] <pid>" >&2
+	echo "Display the current CPU usage (user/kernel) of the threads of a process." >&2
+	echo "Options: " >&2
+	echo "  -h          This help" >&2
+	echo "  -v          Display the version" >&2
+	echo "  -n <delay>  Set the display refresh value in sec." >&2
+}
+
+
+display_version()
+{
+	echo "$0 v.${Version}" >&2
+	echo "Copyright (c) 2021 Christophe BLAESS" >&2
+	echo "License GPLv2: GNU GPL version 2 or later <https://gnu.org/licenses/gpl.html>." >&2
+	echo "This is free software: you are free to change and redistribute it." >&2
+	echo "There is NO WARRANTY, to the extent permitted by law." >&2
+}
+
+
+parse_args()
+{
+
+	OPTIND=0
+	local opt
+	while getopts ":hn:v" opt
+	do
+		case ${opt} in
+			h)
+				display_usage; exit 0
+				;;
+			n)
+				Refresh_delay=$((${OPTARG}))
+				;;
+			v)
+				display_version; exit 0
+				;;
+			:)
+				echo "Missing argument for -$OPTARG option" >&2
+				exit 1
+				;;
+			?)
+				echo "Invalid option: -$OPTARG" >&2
+				exit 1
+				;;
+		esac
+	done
+}
+
+parse_args $@
+shift $((OPTIND - 1))
+if [ $# -ne 1 ]
+then
+	echo "$0: missing PID." >&2
+	exit 1
+fi
+
+System_tick=$(getconf CLK_TCK)
+
+if ! cd /proc/"${1}"/task >/dev/null 2>&1
+then
+	echo "$0: $1 is not a valid PID" >&2
+	exit 1
+fi
+
+Threads_list=$( echo *)
+
+n=0
+for thr in ${Threads_list}
+do
+	user_previous[n]=$(awk '{print $14}' < ${thr}/stat )
+	kernel_previous[n]=$(awk '{print $15}' < ${thr}/stat )
+	n=$((n+1))
+done
+
+while true
+do
+	sleep "${Refresh_delay}"
+
+	n=0
+	for thr in ${Threads_list}
+	do
+		if [ ! -d "${thr}" ]; then exit 0; fi
+		user_current[n]=$(awk '{print $14}' < ${thr}/stat)
+		kernel_current[n]=$(awk '{print $15}' < ${thr}/stat)
+		user_delta=$((${user_current[n]} - ${user_previous[n]}))
+		kernel_delta=$((${kernel_current[n]} - ${kernel_previous[n]}))
+		printf "${thr}: $((${user_delta} * 100 / ${System_tick}))/$((${kernel_delta} * 100 / $System_tick)), "
+		user_previous[n]=${user_current[n]}
+		kernel_previous[n]=${kernel_current[n]}
+		n=$((n+1))
+	done
+	printf "\n"
+done
