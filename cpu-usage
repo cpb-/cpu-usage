@@ -66,8 +66,6 @@ then
 	exit 1
 fi
 
-System_tick=$(getconf CLK_TCK)
-
 if ! cd /proc/"${1}"/task >/dev/null 2>&1
 then
 	echo "$0: $1 is not a valid PID" >&2
@@ -76,6 +74,7 @@ fi
 
 Threads_list=$( echo *)
 
+system_tick_current=$(awk '(NR==1){print $2}' < /proc/stat)
 n=0
 for thr in ${Threads_list}
 do
@@ -87,7 +86,9 @@ done
 while true
 do
 	sleep "${Refresh_delay}"
-
+	system_tick_previous=${system_tick_current}
+	system_tick_current=$(awk '(NR==1){print $2}' < /proc/stat)
+	system_tick_delta=$((${system_tick_current} - ${system_tick_previous}))
 	n=0
 	for thr in ${Threads_list}
 	do
@@ -96,7 +97,7 @@ do
 		kernel_current[n]=$(awk '{print $15}' < ${thr}/stat)
 		user_delta=$((${user_current[n]} - ${user_previous[n]}))
 		kernel_delta=$((${kernel_current[n]} - ${kernel_previous[n]}))
-		printf "${thr}: $((${user_delta} * 100 / ${System_tick}))/$((${kernel_delta} * 100 / $System_tick)), "
+		printf "${thr}: $((${user_delta} * 100 / ${system_tick_delta}))/$((${kernel_delta} * 100 / ${system_tick_delta})), "
 		user_previous[n]=${user_current[n]}
 		kernel_previous[n]=${kernel_current[n]}
 		n=$((n+1))
