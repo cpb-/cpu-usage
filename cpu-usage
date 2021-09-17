@@ -66,6 +66,9 @@ then
 	exit 1
 fi
 
+CPU_count=$(cat /proc/stat | grep ^cpu[0-9]| wc -l)
+
+
 if ! cd /proc/"${1}"/task >/dev/null 2>&1
 then
 	echo "$0: $1 is not a valid PID" >&2
@@ -74,7 +77,6 @@ fi
 
 Threads_list=$( echo *)
 
-system_tick_current=$(awk '(NR==1){print $2}' < /proc/stat)
 n=0
 for thr in ${Threads_list}
 do
@@ -83,21 +85,35 @@ do
 	n=$((n+1))
 done
 
+n=0
+while [ ${n} -lt ${CPU_count} ]
+do
+	system_tick_current[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
+	n=$((n+1))
+done
+
 while true
 do
 	sleep "${Refresh_delay}"
-	system_tick_previous=${system_tick_current}
-	system_tick_current=$(awk '(NR==1){print $2}' < /proc/stat)
-	system_tick_delta=$((${system_tick_current} - ${system_tick_previous}))
+
+	n=0
+	while [ ${n} -lt ${CPU_count} ]
+	do
+		system_tick_previous[$n]=${system_tick_current[$n]}
+		system_tick_current[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
+		system_tick_delta[$n]=$((${system_tick_current[$n]} - ${system_tick_previous[$n]}))
+		n=$((n+1))
+	done
 	n=0
 	for thr in ${Threads_list}
 	do
 		if [ ! -d "${thr}" ]; then exit 0; fi
+		cpu=$(awk '{print $39}' < ${thr}/stat)
 		user_current[n]=$(awk '{print $14}' < ${thr}/stat)
 		kernel_current[n]=$(awk '{print $15}' < ${thr}/stat)
 		user_delta=$((${user_current[n]} - ${user_previous[n]}))
 		kernel_delta=$((${kernel_current[n]} - ${kernel_previous[n]}))
-		printf "${thr}: $((${user_delta} * 100 / ${system_tick_delta}))/$((${kernel_delta} * 100 / ${system_tick_delta})), "
+		printf "${thr}: $((${user_delta} * 100 / ${system_tick_delta[$cpu]}))/$((${kernel_delta} * 100 / ${system_tick_delta[$cpu]})), "
 		user_previous[n]=${user_current[n]}
 		kernel_previous[n]=${kernel_current[n]}
 		n=$((n+1))
