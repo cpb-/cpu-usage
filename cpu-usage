@@ -5,8 +5,10 @@
 #
 
 Refresh_delay=2
+Process_PID=1
 
-Version=0.2
+Version=0.3
+
 
 display_usage()
 {
@@ -19,6 +21,7 @@ display_usage()
 }
 
 
+
 display_version()
 {
 	echo "$0 v.${Version}" >&2
@@ -29,9 +32,9 @@ display_version()
 }
 
 
+
 parse_args()
 {
-
 	OPTIND=0
 	local opt
 	while getopts ":hn:v" opt
@@ -56,81 +59,162 @@ parse_args()
 				;;
 		esac
 	done
+
+	shift $((OPTIND - 1))
+	if [ $# -ne 1 ]
+	then
+		echo "$0: missing PID." >&2
+		exit 1
+	fi
+
+	Proc_PID="${1}"
 }
 
-parse_args $@
-shift $((OPTIND - 1))
-if [ $# -ne 1 ]
-then
-	echo "$0: missing PID." >&2
-	exit 1
-fi
-
-if ! cd /proc/"${1}"/task >/dev/null 2>&1
-then
-	echo "$0: $1 is not a valid PID" >&2
-	exit 1
-fi
-
-Threads_list=$( echo *)
-
-# Store the system statistics for all CPU.
-CPU_count=$(cat /proc/stat | grep ^cpu[0-9]| wc -l)
-
-n=0
-while [ ${n} -lt ${CPU_count} ]
-do
-	system_tick_current[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
-	n=$((n+1))
-done
 
 
-# Store the initials statistics for all threads.
-n=0
-for thr in ${Threads_list}
-do
-	user_previous[$n]=$(awk '{print $14}' < ${thr}/stat )
-	kernel_previous[$n]=$(awk '{print $15}' < ${thr}/stat )
-	n=$((n+1))
-done
+get_threads_list()
+{
+	if ! cd /proc/"${Proc_PID}"/task >/dev/null 2>&1
+	then
+		echo "$0: $1 is not a valid PID" >&2
+		exit 1
+	fi
 
-while true
-do
-	sleep "${Refresh_delay}"
+	Threads_list=$( echo *)
+}
 
-	# Compute the elapsed ticks for all CPU.
+
+
+get_cpu_count()
+{
+	CPU_count=$(cat /proc/stat | grep ^cpu[0-9]| wc -l)
+}
+
+
+
+get_current_system_ticks()
+{
 	n=0
 	while [ ${n} -lt ${CPU_count} ]
 	do
-		system_tick_previous[$n]=${system_tick_current[$n]}
-		system_tick_current[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
-		system_tick_delta[$n]=$((${system_tick_current[$n]} - ${system_tick_previous[$n]}))
+		Current_system_tick[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
 		n=$((n+1))
 	done
+}
 
-	# Compute the statistics for all threads.
+
+
+compute_delta_system_ticks()
+{
+	n=0
+	while [ ${n} -lt ${CPU_count} ]
+	do
+		Delta_system_tick[$n]=$((${Current_system_tick[$n]} - ${Previous_system_tick[$n]}))
+		n=$((n+1))
+	done
+}
+
+
+
+store_current_system_ticks_as_previous()
+{
+	n=0
+	while [ ${n} -lt ${CPU_count} ]
+	do
+		Previous_system_tick[$n]=${Current_system_tick[$n]}
+		n=$((n+1))
+	done
+}
+
+
+
+get_current_tasks_values()
+{
 	n=0
 	for thr in ${Threads_list}
 	do
-		if [ ! -d "${thr}" ]; then exit 0; fi
-		cpu=$(awk '{print $39}' < ${thr}/stat)
-		user_current[$n]=$(awk '{print $14}' < ${thr}/stat)
-		kernel_current[$n]=$(awk '{print $15}' < ${thr}/stat)
-		user_delta=$((${user_current[$n]} - ${user_previous[$n]}))
-		kernel_delta=$((${kernel_current[$n]} - ${kernel_previous[$n]}))
-		user_percent[$n]=$((${user_delta} * 100 / ${system_tick_delta[$cpu]}))
-		kernel_percent[$n]=$((${kernel_delta} * 100 / ${system_tick_delta[$cpu]}))
-		user_previous[$n]=${user_current[$n]}
-		kernel_previous[$n]=${kernel_current[$n]}
+		if [ ! -d "/proc/"${Proc_PID}"/task/${thr}" ]; then exit 0; fi
+		Task_cpu[$n]=$(awk '{print $39}' < /proc/"${Proc_PID}"/task/${thr}/stat)
+		Current_user_time[$n]=$(awk '{print $14}' < /proc/"${Proc_PID}"/task/${thr}/stat)
+		Current_kernel_time[$n]=$(awk '{print $15}' < /proc/"${Proc_PID}"/task/${thr}/stat)
 		n=$((n+1))
 	done
+}
 
-	# Display the statistics for all threads.
+
+
+store_current_tasks_values_as_previous()
+{
 	n=0
 	for thr in ${Threads_list}
 	do
-		printf "%d: %d/%d, " $thr ${user_percent[$n]} ${kernel_percent[$n]}
+		Previous_user_time[$n]=${Current_user_time[$n]}
+		Previous_kernel_time[$n]=${Current_kernel_time[$n]}
+		n=$((n+1))
+	done
+}
+
+
+
+compute_tasks_usages()
+{
+	n=0
+	for thr in ${Threads_list}
+	do
+		user_delta=$((${Current_user_time[$n]} - ${Previous_user_time[$n]}))
+		kernel_delta=$((${Current_kernel_time[$n]} - ${Previous_kernel_time[$n]}))
+		User_task_percent[$n]=$((${user_delta} * 100 / ${Delta_system_tick[${Task_cpu[$n]}]}))
+		Kernel_task_percent[$n]=$((${kernel_delta} * 100 / ${Delta_system_tick[${Task_cpu[$n]}]}))
+		n=$((n+1))
+	done
+}
+
+
+
+display_tasks_usages()
+{
+	n=0
+	for thr in ${Threads_list}
+	do
+		printf "%d: %d/%d, " $thr ${User_task_percent[$n]} ${Kernel_task_percent[$n]}
 		n=$((n + 1))
 	done
 	printf "\n"
-done
+
+}
+
+
+
+main()
+{
+	parse_args $@
+
+	get_threads_list
+
+	get_cpu_count
+
+	get_current_system_ticks
+	store_current_system_ticks_as_previous
+
+	get_current_tasks_values
+	store_current_tasks_values_as_previous
+
+	while true
+	do
+		sleep "${Refresh_delay}"
+
+		get_current_system_ticks
+		compute_delta_system_ticks
+		store_current_system_ticks_as_previous
+
+		get_current_tasks_values
+		compute_tasks_usages
+		store_current_tasks_values_as_previous
+		display_tasks_usages
+
+	done
+}
+
+
+main $@
+
