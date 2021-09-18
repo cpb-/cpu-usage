@@ -88,8 +88,14 @@ The threads will be distributed among the CPU cores. Several threads can reach
 301792: 0/0, 301793: 100/0, 301794: 13/0, 301795: 58/41, 301796: 0/0, 301929: 99/0, 
 ```
 
-But we can also pin them on the same CPU. In this case, the sum of the CPU times
-on a line will be near to 100%.
+But we can also pin them on the same CPU:
+
+```console
+[test]$ taskset -c 0 ./test-process 
+PID = 308106
+```
+
+In this case, the sum of the CPU times on a line will be near to 100%:
 
 ```console
 [cpu-usage]$ ./cpu-usage 308106
