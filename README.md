@@ -9,3 +9,9 @@ The script runs with Bash or compatible shells (it uses arrays of variables).
 It is currently under development and this documentation is incomplete.
 
 
+## Test
+
+You can use the `test-process` program in the `test/` sub-directory: it's a process that
+starts several threads with distinct behaviors.
+
+
