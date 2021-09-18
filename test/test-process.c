@@ -32,6 +32,18 @@ void *user_cpuhog(void *unused)
 }
 
 
+void *limited_user_cpuhog(void *unused)
+{
+	time_t start;
+	time_t now;
+
+	for (start=now=time(NULL); now - start < 5;time(&now))
+		for (int i = 0; i < 10000000; i ++)
+			;
+	return NULL;
+}
+
+
 void *semi_user_cpuhog(void *unused)
 {
 	while (1) {
@@ -69,7 +81,10 @@ int main(void)
 	pthread_create(&thr, NULL, kernel_cpuhog, NULL);
 	pthread_create(&thr, NULL, sleeping_thread, NULL);
 
-	pthread_join(thr, NULL);
+	for (;;) {
+		pthread_create(&thr, NULL, limited_user_cpuhog, NULL);
+		pthread_join(thr, NULL);
+	}
 	return 0;
 }
 
