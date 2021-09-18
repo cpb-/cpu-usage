@@ -1,14 +1,29 @@
 #! /bin/bash
-#
 # SPDX-License-Identifier: GPL-2.0-or-later
+#
+# `cpu-usage` monitor the CPU consumption of the threads of a process.
+#
 # Copyright (C) 2021 Christophe BLAESS <christophe.blaess@logilin.fr>
 #
-
-Refresh_delay=2
-Process_PID=1
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+# more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program; if not, write to the Free Software Foundation, Inc., 51
+# Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
+#
 
 Version=0.3
 
+Refresh_delay=2
+Process_PID=1
 
 display_usage()
 {
@@ -30,6 +45,7 @@ display_version()
 	echo "This is free software: you are free to change and redistribute it." >&2
 	echo "There is NO WARRANTY, to the extent permitted by law." >&2
 }
+
 
 
 
@@ -94,7 +110,8 @@ get_cpu_count()
 
 get_current_system_ticks()
 {
-	n=0
+	local n=0
+
 	while [ ${n} -lt ${CPU_count} ]
 	do
 		Current_system_tick[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
@@ -106,7 +123,8 @@ get_current_system_ticks()
 
 compute_delta_system_ticks()
 {
-	n=0
+	local n=0
+
 	while [ ${n} -lt ${CPU_count} ]
 	do
 		Delta_system_tick[$n]=$((${Current_system_tick[$n]} - ${Previous_system_tick[$n]}))
@@ -118,7 +136,8 @@ compute_delta_system_ticks()
 
 store_current_system_ticks_as_previous()
 {
-	n=0
+	local n=0
+
 	while [ ${n} -lt ${CPU_count} ]
 	do
 		Previous_system_tick[$n]=${Current_system_tick[$n]}
@@ -130,7 +149,9 @@ store_current_system_ticks_as_previous()
 
 get_current_tasks_values()
 {
-	n=0
+	local n=0
+	local thr
+
 	for thr in ${Threads_list}
 	do
 		if [ ! -d "/proc/"${Proc_PID}"/task/${thr}" ]; then exit 0; fi
@@ -145,7 +166,9 @@ get_current_tasks_values()
 
 store_current_tasks_values_as_previous()
 {
-	n=0
+	local n=0
+	local thr
+
 	for thr in ${Threads_list}
 	do
 		Previous_user_time[$n]=${Current_user_time[$n]}
@@ -158,7 +181,11 @@ store_current_tasks_values_as_previous()
 
 compute_tasks_usages()
 {
-	n=0
+	local n=0
+	local thr
+	local user_delta
+	local kernel_delta
+
 	for thr in ${Threads_list}
 	do
 		user_delta=$((${Current_user_time[$n]} - ${Previous_user_time[$n]}))
@@ -173,14 +200,15 @@ compute_tasks_usages()
 
 display_tasks_usages()
 {
-	n=0
+	local n=0
+	local thr
+
 	for thr in ${Threads_list}
 	do
 		printf "%d: %d/%d, " $thr ${User_task_percent[$n]} ${Kernel_task_percent[$n]}
 		n=$((n + 1))
 	done
 	printf "\n"
-
 }
 
 
@@ -194,9 +222,9 @@ main()
 	get_cpu_count
 
 	get_current_system_ticks
-	store_current_system_ticks_as_previous
-
 	get_current_tasks_values
+
+	store_current_system_ticks_as_previous
 	store_current_tasks_values_as_previous
 
 	while true
@@ -204,14 +232,15 @@ main()
 		sleep "${Refresh_delay}"
 
 		get_current_system_ticks
-		compute_delta_system_ticks
-		store_current_system_ticks_as_previous
-
 		get_current_tasks_values
-		compute_tasks_usages
-		store_current_tasks_values_as_previous
-		display_tasks_usages
 
+		compute_delta_system_ticks
+		compute_tasks_usages
+
+		store_current_system_ticks_as_previous
+		store_current_tasks_values_as_previous
+
+		display_tasks_usages
 	done
 }
 
