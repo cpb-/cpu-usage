@@ -21,7 +21,7 @@
 # Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
 #
 
-Version=0.5
+Version=1.0
 
 Refresh_delay=2
 Process_PID=1
