@@ -1,7 +1,8 @@
 #! /bin/bash
+#
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# `cpu-usage` monitor the CPU consumption of the threads of a process.
+# cpu-usage: monitor the CPU consumption of the threads of a process.
 #
 # Copyright (C) 2021 Christophe BLAESS <christophe.blaess@logilin.fr>
 #
@@ -20,36 +21,45 @@
 # Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
 #
 
-Version=0.3
+Version=0.4
 
 Refresh_delay=2
 Process_PID=1
 
-display_usage()
+main()
 {
-	echo "Usage: $0 [option] <pid>" >&2
-	echo "Display the current CPU usage (user/kernel) of the threads of a process." >&2
-	echo "Options: " >&2
-	echo "  -h          This help" >&2
-	echo "  -v          Display the version" >&2
-	echo "  -n <delay>  Set the display refresh value in sec." >&2
+	parse_command_line_args $@
+
+	get_list_of_threads_to_monitor
+
+	get_count_of_online_cpu
+
+	get_current_cpu_ticks
+	get_current_threads_ticks
+
+	store_current_cpu_ticks_as_previous
+	store_current_threads_ticks_as_previous
+
+	while true
+	do
+		sleep "${Refresh_delay}"
+
+		get_current_cpu_ticks
+		get_current_threads_ticks
+
+		compute_delta_cpu_ticks
+		compute_threads_consumptions
+
+		store_current_cpu_ticks_as_previous
+		store_current_threads_ticks_as_previous
+
+		display_threads_consumptions
+	done
 }
 
 
 
-display_version()
-{
-	echo "$0 v.${Version}" >&2
-	echo "Copyright (c) 2021 Christophe BLAESS" >&2
-	echo "License GPLv2: GNU GPL version 2 or later <https://gnu.org/licenses/gpl.html>." >&2
-	echo "This is free software: you are free to change and redistribute it." >&2
-	echo "There is NO WARRANTY, to the extent permitted by law." >&2
-}
-
-
-
-
-parse_args()
+parse_command_line_args()
 {
 	OPTIND=0
 	local opt
@@ -57,13 +67,13 @@ parse_args()
 	do
 		case ${opt} in
 			h)
-				display_usage; exit 0
+				display_script_usage; exit 0
 				;;
 			n)
 				Refresh_delay=$((${OPTARG}))
 				;;
 			v)
-				display_version; exit 0
+				display_script_version; exit 0
 				;;
 			:)
 				echo "Missing argument for -$OPTARG option" >&2
@@ -88,11 +98,34 @@ parse_args()
 
 
 
-get_threads_list()
+display_script_usage()
+{
+	echo "Usage: $0 [option] <pid>" >&2
+	echo "Display the current CPU consumption (user/kernel) of the threads of a process." >&2
+	echo "Options: " >&2
+	echo "  -h          This help" >&2
+	echo "  -v          Display the version" >&2
+	echo "  -n <delay>  Set the display refresh value in sec." >&2
+}
+
+
+
+display_script_version()
+{
+	echo "$0 v.${Version}" >&2
+	echo "Copyright (c) 2021 Christophe BLAESS" >&2
+	echo "License GPLv2: GNU GPL version 2 or later <https://gnu.org/licenses/gpl.html>." >&2
+	echo "This is free software: you are free to change and redistribute it." >&2
+	echo "There is NO WARRANTY, to the extent permitted by law." >&2
+}
+
+
+
+get_list_of_threads_to_monitor()
 {
 	if ! cd /proc/"${Proc_PID}"/task >/dev/null 2>&1
 	then
-		echo "$0: $1 is not a valid PID" >&2
+		echo "$0: ${Proc_PID} is not a valid PID" >&2
 		exit 1
 	fi
 
@@ -101,53 +134,53 @@ get_threads_list()
 
 
 
-get_cpu_count()
+get_count_of_online_cpu()
 {
 	CPU_count=$(cat /proc/stat | grep ^cpu[0-9]| wc -l)
 }
 
 
 
-get_current_system_ticks()
+get_current_cpu_ticks()
 {
 	local n=0
 
 	while [ ${n} -lt ${CPU_count} ]
 	do
-		Current_system_tick[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
+		Current_cpu_tick[$n]=$(awk '(NR=='$((n + 2))'){print $2+$3+$4+$5}' < /proc/stat)
 		n=$((n+1))
 	done
 }
 
 
 
-compute_delta_system_ticks()
+compute_delta_cpu_ticks()
 {
 	local n=0
 
 	while [ ${n} -lt ${CPU_count} ]
 	do
-		Delta_system_tick[$n]=$((${Current_system_tick[$n]} - ${Previous_system_tick[$n]}))
+		Delta_cpu_tick[$n]=$((${Current_cpu_tick[$n]} - ${Previous_cpu_tick[$n]}))
 		n=$((n+1))
 	done
 }
 
 
 
-store_current_system_ticks_as_previous()
+store_current_cpu_ticks_as_previous()
 {
 	local n=0
 
 	while [ ${n} -lt ${CPU_count} ]
 	do
-		Previous_system_tick[$n]=${Current_system_tick[$n]}
+		Previous_cpu_tick[$n]=${Current_cpu_tick[$n]}
 		n=$((n+1))
 	done
 }
 
 
 
-get_current_tasks_values()
+get_current_threads_ticks()
 {
 	local n=0
 	local thr
@@ -156,30 +189,30 @@ get_current_tasks_values()
 	do
 		if [ ! -d "/proc/"${Proc_PID}"/task/${thr}" ]; then exit 0; fi
 		Task_cpu[$n]=$(awk '{print $39}' < /proc/"${Proc_PID}"/task/${thr}/stat)
-		Current_user_time[$n]=$(awk '{print $14}' < /proc/"${Proc_PID}"/task/${thr}/stat)
-		Current_kernel_time[$n]=$(awk '{print $15}' < /proc/"${Proc_PID}"/task/${thr}/stat)
+		Current_user_ticks[$n]=$(awk '{print $14}' < /proc/"${Proc_PID}"/task/${thr}/stat)
+		Current_kernel_ticks[$n]=$(awk '{print $15}' < /proc/"${Proc_PID}"/task/${thr}/stat)
 		n=$((n+1))
 	done
 }
 
 
 
-store_current_tasks_values_as_previous()
+store_current_threads_ticks_as_previous()
 {
 	local n=0
 	local thr
 
 	for thr in ${Threads_list}
 	do
-		Previous_user_time[$n]=${Current_user_time[$n]}
-		Previous_kernel_time[$n]=${Current_kernel_time[$n]}
+		Previous_user_ticks[$n]=${Current_user_ticks[$n]}
+		Previous_kernel_ticks[$n]=${Current_kernel_ticks[$n]}
 		n=$((n+1))
 	done
 }
 
 
 
-compute_tasks_usages()
+compute_threads_consumptions()
 {
 	local n=0
 	local thr
@@ -188,17 +221,17 @@ compute_tasks_usages()
 
 	for thr in ${Threads_list}
 	do
-		user_delta=$((${Current_user_time[$n]} - ${Previous_user_time[$n]}))
-		kernel_delta=$((${Current_kernel_time[$n]} - ${Previous_kernel_time[$n]}))
-		User_task_percent[$n]=$((${user_delta} * 100 / ${Delta_system_tick[${Task_cpu[$n]}]}))
-		Kernel_task_percent[$n]=$((${kernel_delta} * 100 / ${Delta_system_tick[${Task_cpu[$n]}]}))
+		user_delta=$((${Current_user_ticks[$n]} - ${Previous_user_ticks[$n]}))
+		kernel_delta=$((${Current_kernel_ticks[$n]} - ${Previous_kernel_ticks[$n]}))
+		User_task_percent[$n]=$((${user_delta} * 100 / ${Delta_cpu_tick[${Task_cpu[$n]}]}))
+		Kernel_task_percent[$n]=$((${kernel_delta} * 100 / ${Delta_cpu_tick[${Task_cpu[$n]}]}))
 		n=$((n+1))
 	done
 }
 
 
 
-display_tasks_usages()
+display_threads_consumptions()
 {
 	local n=0
 	local thr
@@ -213,37 +246,4 @@ display_tasks_usages()
 
 
 
-main()
-{
-	parse_args $@
-
-	get_threads_list
-
-	get_cpu_count
-
-	get_current_system_ticks
-	get_current_tasks_values
-
-	store_current_system_ticks_as_previous
-	store_current_tasks_values_as_previous
-
-	while true
-	do
-		sleep "${Refresh_delay}"
-
-		get_current_system_ticks
-		get_current_tasks_values
-
-		compute_delta_system_ticks
-		compute_tasks_usages
-
-		store_current_system_ticks_as_previous
-		store_current_tasks_values_as_previous
-
-		display_tasks_usages
-	done
-}
-
-
 main $@
-
