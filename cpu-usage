@@ -188,10 +188,10 @@ get_current_threads_ticks()
 
 	for thr in ${Threads_list}
 	do
-		Task_cpu[${thr}]=$(awk '{print $39}' < /proc/"${Proc_PID}"/task/${thr}/stat)
-		Current_user_ticks[${thr}]=$(awk '{print $14}' < /proc/"${Proc_PID}"/task/${thr}/stat)
-		Current_kernel_ticks[${thr}]=$(awk '{print $15}' < /proc/"${Proc_PID}"/task/${thr}/stat)
-	done
+		Task_cpu[${thr}]=$(awk '{print $39}' < /proc/"${Proc_PID}"/task/${thr}/stat) || Task_cpu[${thr}]=-1
+		Current_user_ticks[${thr}]=$(awk '{print $14}' < /proc/"${Proc_PID}"/task/${thr}/stat) || Task_cpu[${thr}]=-1
+		Current_kernel_ticks[${thr}]=$(awk '{print $15}' < /proc/"${Proc_PID}"/task/${thr}/stat) || Task_cpu[${thr}]=-1
+	done 2>/dev/null
 }
 
 
@@ -217,7 +217,7 @@ compute_threads_consumptions()
 
 	for thr in ${Threads_list}
 	do
-		if [ -n "${Previous_user_ticks[${thr}]}" ]
+		if [ -n "${Previous_user_ticks[${thr}]}" ] && [ ${Task_cpu[${thr}]} -ge 0 ]
 		then
 			user_delta=$((${Current_user_ticks[${thr}]} - ${Previous_user_ticks[${thr}]}))
 			kernel_delta=$((${Current_kernel_ticks[${thr}]} - ${Previous_kernel_ticks[${thr}]}))
@@ -226,7 +226,7 @@ compute_threads_consumptions()
 		else
 			User_task_percent[${thr}]=-1
 			Kernel_task_percent[${thr}]=-1
-		fi			
+		fi
 	done
 }
 
