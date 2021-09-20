@@ -18,7 +18,7 @@
 #
 # You should have received a copy of the GNU General Public License along with
 # this program; if not, write to the Free Software Foundation, Inc., 51
-# Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA. 
+# Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
 Version=1.0
@@ -240,7 +240,7 @@ display_threads_consumptions()
 	do
 		if [ ${User_task_percent[${thr}]} -ge 0 ]
 		then
-			printf "%d: %d/%d, " $thr ${User_task_percent[${thr}]} ${Kernel_task_percent[${thr}]}
+			printf "%d: %3d/%-3d, " $thr ${User_task_percent[${thr}]} ${Kernel_task_percent[${thr}]}
 		fi
 	done
 	printf "\n"
