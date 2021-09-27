@@ -18,7 +18,7 @@
  * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-
+#define _GNU_SOURCE
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -77,12 +77,21 @@ int main(void)
 	fprintf(stderr, "PID = %d\n", getpid());
 
 	pthread_create(&thr, NULL, user_cpuhog, NULL);
+	pthread_setname_np(thr, "cpuhog");
+
 	pthread_create(&thr, NULL, semi_user_cpuhog, NULL);
+	pthread_setname_np(thr, "semi-cpuhog");
+
 	pthread_create(&thr, NULL, kernel_cpuhog, NULL);
+	pthread_setname_np(thr, "kernel-hog");
+
 	pthread_create(&thr, NULL, sleeping_thread, NULL);
+	pthread_setname_np(thr, "sleeper");
 
 	for (;;) {
 		pthread_create(&thr, NULL, limited_user_cpuhog, NULL);
+		pthread_setname_np(thr, "temporary-hog");
+
 		pthread_join(thr, NULL);
 	}
 	return 0;

@@ -25,6 +25,7 @@ Version=1.0
 
 Refresh_delay=2
 Process_PID=1
+Display_names=0
 
 main()
 {
@@ -65,7 +66,7 @@ parse_command_line_args()
 {
 	OPTIND=0
 	local opt
-	while getopts ":hn:v" opt
+	while getopts ":hn:tv" opt
 	do
 		case ${opt} in
 			h)
@@ -73,6 +74,9 @@ parse_command_line_args()
 				;;
 			n)
 				Refresh_delay=$((${OPTARG}))
+				;;
+			t)
+				Display_names=1
 				;;
 			v)
 				display_script_version; exit 0
@@ -108,6 +112,7 @@ display_script_usage()
 	echo "  -h          This help" >&2
 	echo "  -v          Display the version" >&2
 	echo "  -n <delay>  Set the display refresh value in sec." >&2
+	echo "  -t          Display threads names instead of TID." >&2
 }
 
 
@@ -191,6 +196,10 @@ get_current_threads_ticks()
 		Task_cpu[${thr}]=$(awk '{print $39}' < /proc/"${Proc_PID}"/task/${thr}/stat) || Task_cpu[${thr}]=-1
 		Current_user_ticks[${thr}]=$(awk '{print $14}' < /proc/"${Proc_PID}"/task/${thr}/stat) || Task_cpu[${thr}]=-1
 		Current_kernel_ticks[${thr}]=$(awk '{print $15}' < /proc/"${Proc_PID}"/task/${thr}/stat) || Task_cpu[${thr}]=-1
+		if [ ${Display_names} -ne 0 ]
+		then
+			Thread_name[${thr}]=$(cat /proc/"${Proc_PID}"/task/${thr}/comm) || Task_cpu[${thr}]=-1
+		fi
 	done 2>/dev/null
 }
 
@@ -240,7 +249,12 @@ display_threads_consumptions()
 	do
 		if [ ${User_task_percent[${thr}]} -ge 0 ]
 		then
-			printf "%d: %3d/%-3d, " $thr ${User_task_percent[${thr}]} ${Kernel_task_percent[${thr}]}
+			if [ ${Display_names} -eq 0 ]
+			then
+				printf "%d: %3d/%-3d, " $thr ${User_task_percent[${thr}]} ${Kernel_task_percent[${thr}]}
+			else
+				printf "%s: %3d/%-3d, " ${Thread_name[${thr}]} ${User_task_percent[${thr}]} ${Kernel_task_percent[${thr}]}
+			fi
 		fi
 	done
 	printf "\n"

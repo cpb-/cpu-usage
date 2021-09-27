@@ -54,6 +54,21 @@ The threads have distincts behaviors:
 - `301032` is a sleeping thread that does not consume CPU cycles.
 - `301101` is a temporary *cpuhog* that does a few loops then terminates. 
 
+## Thread names
+
+With the `-t` option, `cpusage` displays the *names* of the threads instead of their identifiers:
+
+```console
+[cpu-usage (main *)]$ ./cpu-usage -t 306738
+test-process:   0/0  , cpuhog: 100/0  , semi-cpuhog:  13/0  , kernel-hog:  64/35 , sleeper:   0/0  , temporary-hog:  99/0  , 
+test-process:   0/0  , cpuhog:  99/0  , semi-cpuhog:  16/0  , kernel-hog:  63/36 , sleeper:   0/0  , 
+test-process:   0/0  , cpuhog: 100/0  , semi-cpuhog:   9/6  , kernel-hog:  60/40 , sleeper:   0/0  , temporary-hog: 100/0  , 
+test-process:   0/0  , cpuhog: 100/0  , semi-cpuhog:  15/0  , kernel-hog:  61/38 , sleeper:   0/0  , 
+test-process:   0/0  , cpuhog: 100/0  , semi-cpuhog:  14/0  , kernel-hog:  63/35 , sleeper:   0/0  , temporary-hog: 100/0  ,
+```
+
+Note that using the `pthread_setname_np()` function to set the thread name is not described
+in Posix (`_np`) and needs to define the `_GNU_SOURCE` symbolic constant before including `pthread.h`.
 
 ## Test
 
